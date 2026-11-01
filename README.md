@@ -61,13 +61,14 @@ Pro 8X images do **not** work on the BPI-R4 and the other way round.
 | File | Used for |
 |---|---|
 | `…-sdcard.img.gz` | microSD card — flash with Etcher, boots on its own ([Step 1](#step-1--flash-the-sd-card)) |
-| `…-snand-img.bin` | NAND installer system, written by `install-nand.sh` |
+| `…-snand-img.bin` | BPI-R4 NAND boot firmware only; Pro 8X keeps its installer OS |
 | `…-emmc-img.bin` | eMMC, written by `install-emmc.sh` |
-| `…-nvme-img.bin` + `bpi-r4*.itb` | NVMe, written by `install-nvme.sh` |
+| `…-nvme-sysupgrade.tar` | BPI-R4 raw FIT + separate SquashFS installation and sysupgrade |
+| `…-nvme-img.bin` + `bpi-r4-pro-8x.itb` | Pro 8X NVMe, unchanged |
 | `bpi-r4*.itb` | firmware update with `sysupgrade` ([Updating](#updating)) |
 | `sha256sums`, `config.buildinfo` | checksums and the exact build configuration |
 
-You normally download only the SD image by hand; the installers fetch the rest.
+For BPI-R4, download SD, NVMe tar and matching NAND firmware. Pro 8X installers retain their download prompts.
 
 ---
 
@@ -91,98 +92,50 @@ After installation the router is at **`192.168.1.1`**, user `root`, **no passwor
 | NAND        | 0 | 1 |
 | eMMC        | 1 | 0 |
 
-> **NVMe boot** is controlled by the U-Boot environment, not by the DIP switch. After `install-nvme.sh` the board boots from NVMe automatically — the DIP stays at **NAND** (A=0, B=1) and is never changed again.
+> **NVMe boot:** BPI-R4 NAND firmware defaults to SSD boot. Keep DIP at **NAND** (A=0, B=1) after preparing SSD from SD. Pro 8X uses its saved environment selector.
 
-NAND and eMMC are fully working permanent options. NVMe is recommended for larger storage and is required for the UniFi stack.
+The new BPI-R4 NAND artifact contains firmware only. Its production OS resides on NVMe; Pro 8X keeps its existing media options.
 
 ---
 
 ## Part A — BPI-R4: Install
 
-The SD card is a **full, self-contained OpenWrt system**. It boots on its own and
-ships the installer scripts in `/root/install-dir/`. From there you write a small
-installer system to NAND, and the NAND system installs eMMC or NVMe.
+BPI-R4 uses a raw kernel/device-tree FIT on NVMe p1, a separate read-only
+ZSTD level 9 SquashFS rootfs on p2 and an ext4 writable overlay on p3. No
+initramfs is used. This is a fresh-install format. Pro 8X keeps its separate existing flow.
 
-> **Why go through NAND?** eMMC and the SD card share the same MMC controller, so
-> eMMC cannot be written while you are booted from SD. Installing eMMC (and, for a
-> consistent flow, NVMe) is therefore always done from the NAND system.
+1. Build/download matching board/RAM outputs: the SD image, the
+   `*-nvme-sysupgrade.tar`, and the `*-nand*-snand-img.bin` from the same build.
+   Check `sha256sums`. NAND now contains BL2 + FIP/environment only, no OS.
+2. Flash the SD image, select SW3 **A=1, B=1**, boot and connect via SSH.
+3. Copy the NVMe tar and matching NAND firmware to `/tmp` on the router.
+4. While still running from SD, run (4 GB non-PoE example):
 
-If you only want to try OpenWrt, Step 1 is enough — run it from the SD card.
+   ```sh
+   /root/install-dir/install-nvme.sh \
+     /tmp/openwrt-mediatek-filogic-bananapi_bpi-r4-nvme-sysupgrade.tar \
+     /tmp/openwrt-mediatek-filogic-bananapi_bpi-r4-nand-snand-img.bin
+   ```
 
-### Step 1 — Flash the SD card
+   The installer validates the bundle, erases SSD, creates four partitions,
+   installs SSD boot/root/overlay/data, then flashes the NAND firmware. It
+   refuses to run on eMMC/NVMe or overwrite mounted NVMe filesystems.
+5. Power off, remove SD, select SW3 **A=0, B=1**, and power on. NAND U-Boot
+   selects SSD root by PARTUUID; preinit configures OpenWrt extroot to use
+   p3 on that exact SSD and verifies the resulting mounts.
 
-1. In [Releases](https://github.com/woziwrt/bpi-r4-deploy/releases) open the release for your board
-   ([which one?](#quick-start-which-image-do-i-need)) and download its **SD image**, for example:
-
-   | RAM | Release | SD image |
-   |---|---|---|
-   | 4 GB | `release-4gb-standard` | `openwrt-mediatek-filogic-bananapi_bpi-r4-sdcard.img.gz` |
-   | 8 GB | `release-8gb-standard` | `openwrt-mediatek-filogic-bananapi_bpi-r4-8gb-sdcard.img.gz` |
-
-   PoE boards use the `release-*-poe` releases and the `…-poe-…-sdcard.img.gz` image.
-
-2. Flash it to a microSD card with [Balena Etcher](https://etcher.balena.io/).
-3. Insert the SD card, set DIP **A=1, B=1** (SD boot) and power on.
-4. Connect via SSH: `ssh root@192.168.1.1` (no password).
-
----
-
-### Step 2 — Write the NAND installer system
-
-Connect the WAN cable and run from the SD card:
-
-```
-/root/install-dir/install-nand.sh
-```
-
-Select your **RAM (4 GB or 8 GB)**, then the file source — download from GitHub (default) or a local file in `/tmp`.
-The board is detected from the running system: a **2.5GE PoE** board (booted from the PoE SD image) gets the PoE NAND image, with the PoE U-Boot.
-
-> ⚠️ **PoE boards:** the PoE NAND image and the NVMe boot from it are not tested on hardware — we do not own a PoE board.
-> If you install it, please report how it went in an [issue](https://github.com/woziwrt/bpi-r4-deploy/issues).
-
-After the script finishes:
-
-1. Power off.
-2. Set DIP **A=0, B=1** (NAND boot) and power on.
-3. Connect via SSH: `ssh root@192.168.1.1`.
-
-You are now on the NAND system, which installs eMMC and NVMe below.
-
----
-
-### Step 3 — Install OpenWrt to NVMe
-
-> Run this **from the NAND system** (DIP A=0, B=1).
-
-> ⚠️ **Want both NVMe and eMMC?** Run `install-emmc.sh` **before** `install-nvme.sh`. After the NVMe installation the board always boots from NVMe.
-
-> For the **UniFi stack** use `install-nvme-unifi.sh` instead — see [Part B](#part-b--bpi-r4-unifi-stack).
-
-Connect the WAN cable and run:
-
-```
-/root/install-dir/install-nvme.sh
-```
-
-Select your board variant (1–8). The script checks the NVMe health, downloads the images (~150 MB), **erases the whole NVMe**, writes OpenWrt and reboots into it.
-
----
-
-### Step 3 alternative — Install to eMMC
-
-> Run this **from the NAND system** (DIP A=0, B=1). eMMC shares its controller
-> with the SD card, so it cannot be written from the SD system.
-
-```
-/root/install-dir/install-emmc.sh
-```
-
-Select your board variant (1–8). After the installation set DIP **A=1, B=0** (eMMC boot) and power on.
+There is no intermediate NAND OpenWrt boot. NAND boot defaults already select
+NVMe, so the installer does not use `fw_setenv` against the SD environment.
+See [NVME-SQUASHFS.md](boards/bpi-r4/NVME-SQUASHFS.md) for layout, upgrades and limits.
+The new path has not been built or boot-tested on a board.
 
 ---
 
 ## Part B — BPI-R4: UniFi stack
+
+> The legacy BPI-R4 UniFi installer below is disabled for the ext4 layout.
+> Its p3-data assumptions need porting; use Part A for the base SSD system.
+> The Pro 8X instructions in Part D use a separate unchanged installer.
 
 ### What you need
 
@@ -400,23 +353,43 @@ Cameras and access points are adopted as in Part B — see [Adding a camera](#ad
 
 ## Updating
 
-Update a running system with the release's `.itb` file (`bpi-r4.itb`, `bpi-r4-poe.itb` or `bpi-r4-pro-8x.itb`):
+**BPI-R4 NVMe SquashFS:** use the matching `*-nvme-sysupgrade.tar`, not a `.itb`.
+LuCI's firmware flash and `sysupgrade` use the same platform handler:
 
-- **LuCI** → System → Backup / Flash Firmware → *Flash image*, keep settings ticked, or
-- **SSH:** copy the file to `/tmp` and run `sysupgrade /tmp/bpi-r4.itb`.
+```sh
+sysupgrade -T /tmp/openwrt-mediatek-filogic-bananapi_bpi-r4-nvme-sysupgrade.tar
+sysupgrade /tmp/openwrt-mediatek-filogic-bananapi_bpi-r4-nvme-sysupgrade.tar
+```
 
-What survives depends on where the system runs:
+Keep settings enabled (the default) to save the selected configuration archive
+onto a fresh p3 overlay. Early boot restores it. `sysupgrade -n` resets the
+upper without restoring settings. p4 data and NAND firmware/environment are
+not written. Installed packages not included in the new image must be
+reinstalled. Keep an external backup until hardware tests have validated the
+new path. There is no support for upgrading the old combined-FIT SSD layout.
 
-| Installed on | Settings | Data partitions |
-|---|---|---|
-| SD card, eMMC, NAND | kept (standard OpenWrt upgrade) | — |
-| NVMe | **not kept** — back to defaults | `p3` (and `p4` on UniFi installs) untouched |
+The handler checks that the FIT and rootfs fit p1/p2 before writing them
+directly to those partitions. p1 has no filesystem. Its final FIT sector
+is zero-padded to 512 bytes. A partial raw write can require SD recovery;
+there is no staged kernel file or A/B fallback.
 
-On NVMe the upgrade script writes the new firmware but does not carry the settings over, even with *keep settings* ticked. So before upgrading an NVMe install, save your settings (*System → Backup / Flash Firmware → Generate archive*) and restore that archive after the upgrade.
+The standard sysupgrade tar carries the raw SquashFS and kernel FIT. Mandatory
+`fwtool` validation checks the whole-image CRC before extraction or device writes.
+The rootfs is validated and written by streaming it from the archive. Only
+the kernel FIT and metadata are extracted into `/tmp`, avoiding a second
+rootfs copy in RAM. Validation finishes before partition writes.
 
-This table comes from reading the upgrade scripts, not from a test on every board. If your result differs, please open an issue.
+**SD/eMMC and Pro 8X:** their existing FIT-based update paths still use the
+matching `.itb`. Pro 8X NVMe settings still require manual backup and restore.
 
-> ⚠️ **Do not re-run `install-nvme.sh`, `install-nvme-unifi.sh` or `install-emmc.sh` to update.** They are installers: they erase the whole disk, data partitions included.
+Do not rerun an installer to update: installers erase the disk, including data.
+See [NVME-SQUASHFS.md](boards/bpi-r4/NVME-SQUASHFS.md) for implementation and test limits.
+
+Factory reset through `firstboot`, `factoryreset`, LuCI or the reset button is
+not supported on the NVMe system: fstools cannot discover the separate p3
+extroot overlay through its normal `rootfs_data` lookup. To reset settings,
+run `sysupgrade -n <nvme-sysupgrade.tar>` with a matching NVMe image. This resets
+the overlay while preserving p4 (`/data`).
 
 ---
 
@@ -473,6 +446,18 @@ Downloaded source archives in `openwrt/dl/` are kept and reused on subsequent ru
 
 Builds automatically enable compiler caching when `ccache` is installed,
 using its configured cache directory (including a `CCACHE_DIR` override).
+
+For BPI-R4, configure NVMe partition capacities in
+`boards/bpi-r4/configs/<variant>.config` (MiB):
+
+```ini
+CONFIG_TARGET_ROOTFS_PARTSIZE=1024
+CONFIG_BPI_R4_NVME_OVERLAY_PARTSIZE=16384
+```
+
+The defaults reserve 1 GiB for the read-only root and 16 GiB for the writable
+overlay. Normal, incremental and Docker builds use these values. They control
+fresh installations; sysupgrade preserves existing partition sizes.
 
 #### Building with Docker
 
@@ -536,22 +521,30 @@ MediaTek preparation.
 
 ## NVMe partition layout
 
-`install-nvme.sh`:
+BPI-R4 `install-nvme.sh`:
 
 | Partition | Size | Purpose |
-|-----------|------|---------|
-| p1 | 256 MB | Boot (kernel) |
-| p2 | 16 GB | System (firmware + settings) |
-| p3 | rest of the disk | Data (`/mnt/nvme0n1p3`, ext4) |
+| --- | --- | --- |
+| p1 `boot` | 256 MiB, raw | FIT at partition start: kernel + DT/overlays only |
+| p2 `rootfs` | Configurable, default 1 GiB | ZSTD level 9 SquashFS read-only lower root |
+| p3 `rootfs_data` | Configurable, default 16 GiB, ext4 | Persistent writable overlay |
+| p4 `data` | Remaining SSD, ext4 | `/data` |
 
-`install-nvme-unifi.sh`:
+Set `CONFIG_TARGET_ROOTFS_PARTSIZE` in `boards/bpi-r4/configs/<variant>.config`
+to p2 capacity in MiB (default `1024`); this also sizes the SD/eMMC image
+partition. The SquashFS payload is rounded to 1 KiB in the standard tar, while
+installation reserves the configured capacity for future larger images.
+Sysupgrade preserves that capacity and rejects images that exceed it.
+SD/eMMC rootfs images retain XZ.
 
-| Partition | Size | Purpose |
-|-----------|------|---------|
-| p1 | 256 MB | Boot (kernel) |
-| p2 | 512 MB | System (firmware + settings) |
-| p3 | 30 GB (15 GB on the test profile) | Data: UniFi setup, Docker, Network Application |
-| p4 | rest of the disk | UniFi Protect recordings (`/mnt/nvme0n1p4`) |
+Set overlay capacity in MiB when building, for example
+`BPI_R4_NVME_OVERLAY_PARTSIZE=8192 ./build.sh bpi-r4 standard` for an 8 GiB p3.
+The default is `16384`. Image metadata carries both capacities for fresh
+installation; sysupgrade preserves the installed partition sizes.
+
+Pro 8X and its UniFi installer retain their separate original layouts. The
+legacy BPI-R4 UniFi installer is disabled rather than writing over the new
+p3 overlay partition.
 
 ---
 

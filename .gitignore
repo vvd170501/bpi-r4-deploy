@@ -4,6 +4,7 @@
 # Editor backups / temp
 *~
 *.swp
+__pycache__
 
 # wifimgr session/planning docs — not needed for builds
 common/packages/luci-app-wifimgr/CLAUDE.md

@@ -127,7 +127,7 @@ jobs:
           make_release_dir rel-4gb \
             "openwrt-mediatek-filogic-bananapi_bpi-r4-squashfs-sysupgrade.itb" \
             "bpi-r4.itb" \
-            "openwrt-mediatek-filogic-bananapi_bpi-r4-nvme-img.bin" \
+            "openwrt-mediatek-filogic-bananapi_bpi-r4-nvme-sysupgrade.tar" \
             "openwrt-mediatek-filogic-bananapi_bpi-r4-sdcard.img.gz" \
             "openwrt-mediatek-filogic-bananapi_bpi-r4-emmc-img.bin" \
             "openwrt-mediatek-filogic-bananapi_bpi-r4-nand-snand-img.bin"
@@ -136,7 +136,7 @@ jobs:
           make_release_dir rel-4gb-poe \
             "openwrt-mediatek-filogic-bananapi_bpi-r4-poe-squashfs-sysupgrade.itb" \
             "bpi-r4-poe.itb" \
-            "openwrt-mediatek-filogic-bananapi_bpi-r4-poe-nvme-img.bin" \
+            "openwrt-mediatek-filogic-bananapi_bpi-r4-poe-nvme-sysupgrade.tar" \
             "openwrt-mediatek-filogic-bananapi_bpi-r4-poe-sdcard.img.gz" \
             "openwrt-mediatek-filogic-bananapi_bpi-r4-poe-emmc-img.bin" \
             "openwrt-mediatek-filogic-bananapi_bpi-r4-poe-nand-snand-img.bin"
@@ -145,7 +145,7 @@ jobs:
           make_release_dir rel-8gb \
             "openwrt-mediatek-filogic-bananapi_bpi-r4-8gb-squashfs-sysupgrade.itb" \
             "bpi-r4.itb" \
-            "openwrt-mediatek-filogic-bananapi_bpi-r4-8gb-nvme-img.bin" \
+            "openwrt-mediatek-filogic-bananapi_bpi-r4-8gb-nvme-sysupgrade.tar" \
             "openwrt-mediatek-filogic-bananapi_bpi-r4-8gb-sdcard.img.gz" \
             "openwrt-mediatek-filogic-bananapi_bpi-r4-8gb-emmc-img.bin" \
             "openwrt-mediatek-filogic-bananapi_bpi-r4-nand-8gb-snand-img.bin"
@@ -154,7 +154,7 @@ jobs:
           make_release_dir rel-8gb-poe \
             "openwrt-mediatek-filogic-bananapi_bpi-r4-poe-8gb-squashfs-sysupgrade.itb" \
             "bpi-r4-poe.itb" \
-            "openwrt-mediatek-filogic-bananapi_bpi-r4-poe-8gb-nvme-img.bin" \
+            "openwrt-mediatek-filogic-bananapi_bpi-r4-poe-8gb-nvme-sysupgrade.tar" \
             "openwrt-mediatek-filogic-bananapi_bpi-r4-poe-8gb-sdcard.img.gz" \
             "openwrt-mediatek-filogic-bananapi_bpi-r4-poe-8gb-emmc-img.bin" \
             "openwrt-mediatek-filogic-bananapi_bpi-r4-poe-nand-8gb-snand-img.bin"
@@ -203,7 +203,11 @@ jobs:
               || { echo "$1: NAND U-Boot does not boot $2"; exit 1; }
             strings "$1" | grep -q "^boot_nvme=" \
               || { echo "$1: NAND U-Boot has no boot_nvme"; exit 1; }
-            echo "$1: $2, boot_nvme"
+            strings "$1" | grep -q 'root=PARTUUID=' \
+              || { echo "$1: missing UUID-based root"; exit 1; }
+            strings "$1" | grep -q 'rootfstype=squashfs' \
+              || { echo "$1: missing SquashFS root"; exit 1; }
+            echo "$1: $2, boot_nvme, squashfs"
           }
           for DIR in rel-4gb rel-8gb; do
             check_snand "$(ls $DIR/*-snand-img.bin)" config-mt7988a-bananapi-bpi-r4
@@ -217,15 +221,10 @@ jobs:
         with:
           name: images-bpi-r4-${{ github.event.inputs.variant }}
           path: |
-            rel-4gb/*.itb
-            rel-4gb/openwrt-*-sdcard.img.gz
-            rel-4gb/config.buildinfo
-            rel-4gb-poe/*.itb
-            rel-4gb-poe/openwrt-*-sdcard.img.gz
-            rel-8gb/*.itb
-            rel-8gb/openwrt-*-sdcard.img.gz
-            rel-8gb-poe/*.itb
-            rel-8gb-poe/openwrt-*-sdcard.img.gz
+            rel-4gb/*
+            rel-4gb-poe/*
+            rel-8gb/*
+            rel-8gb-poe/*
           if-no-files-found: error
           retention-days: 14
 

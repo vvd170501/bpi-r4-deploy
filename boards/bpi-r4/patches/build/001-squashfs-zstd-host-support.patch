@@ -1,0 +1,16 @@
+--- a/tools/squashfs4/Makefile
++++ b/tools/squashfs4/Makefile
+@@ -27,7 +27,7 @@
+ 		LZ4_SUPPORT=0 \
+ 		LZO_SUPPORT=0 \
+-		ZSTD_SUPPORT=0 \
++		ZSTD_SUPPORT=1 \
+ 		GZIP_SUPPORT=1 \
+ 		XZ_SUPPORT=1 \
+ 		LZMA_XZ_SUPPORT=1 \
+ 		XZ_EXTENDED_OPTIONS=1 \
+--- a/tools/Makefile
++++ b/tools/Makefile
+@@ -135,1 +135,1 @@
+-$(curdir)/squashfs4/compile := $(curdir)/xz/compile $(curdir)/zlib/compile
++$(curdir)/squashfs4/compile := $(curdir)/xz/compile $(curdir)/zlib/compile $(curdir)/zstd/compile

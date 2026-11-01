@@ -1,7 +1,13 @@
 --- a/package/utils/fitblk/files/fit.sh
 +++ b/package/utils/fitblk/files/fit.sh
-@@ -1,9 +1,7 @@
+@@ -1,9 +1,13 @@
++. /lib/upgrade/zz-nvme-squashfs.sh
++
  export_fitblk_bootdev() {
++	if nvme_squashfs_booted; then
++		export CI_METHOD=nvme
++		return
++	fi
  	[ -e /sys/firmware/devicetree/base/chosen/rootdisk ] || return
 -
  	local rootdisk="$(cat /sys/firmware/devicetree/base/chosen/rootdisk)"
@@ -10,7 +16,7 @@
  	for handle in /sys/class/mtd/mtd*/of_node/volumes/*/phandle; do
  		[ ! -e "$handle" ] && continue
  		if [ "$rootdisk" = "$(cat "$handle")" ]; then
-@@ -19,7 +17,6 @@
+@@ -19,7 +23,6 @@
  			return
  		fi
  	done
@@ -18,7 +24,7 @@
  	for handle in /sys/class/mtd/mtd*/of_node/phandle; do
  		[ ! -e "$handle" ] && continue
  		if [ "$rootdisk" = "$(cat $handle)" ]; then
-@@ -30,7 +27,6 @@
+@@ -30,7 +33,6 @@
  			return
  		fi
  	done
@@ -26,7 +32,7 @@
  	for handle in /sys/class/block/*/of_node/phandle; do
  		[ ! -e "$handle" ] && continue
  		if [ "$rootdisk" = "$(cat $handle)" ]; then
-@@ -41,6 +37,31 @@
+@@ -41,6 +43,13 @@
  			return
  		fi
  	done
@@ -37,28 +43,10 @@
 +			return
 +		fi
 +	done
-+}
-+
-+nvme_do_upgrade() {
-+	local itb="$1"
-+
-+	# Write kernel to p1 (ext4)
-+	mkdir -p /mnt/nvme_upgrade
-+	if ! mount /dev/nvme0n1p1 /mnt/nvme_upgrade; then
-+		echo "ERROR: Cannot mount /dev/nvme0n1p1"
-+		return 1
-+	fi
-+	cp "$itb" /mnt/nvme_upgrade/bpi-r4.itb
-+	sync
-+	umount /mnt/nvme_upgrade
-+
-+	# Write rootfs to p2 (raw FIT)
-+	dd if="$itb" of=/dev/nvme0n1p2 bs=1M conv=fsync
-+	sync
  }
  
  fit_do_upgrade() {
-@@ -48,7 +69,6 @@
+@@ -48,7 +57,6 @@
  	[ -n "$CI_METHOD" ] || return 1
  	[ -e /dev/fit0 ] && fitblk /dev/fit0
  	[ -e /dev/fitrw ] && fitblk /dev/fitrw
@@ -66,22 +54,27 @@
  	case "$CI_METHOD" in
  	emmc)
  		emmc_do_upgrade "$1"
-@@ -59,6 +79,9 @@
+@@ -59,15 +67,22 @@
  	ubi)
  		nand_do_upgrade "$1"
  		;;
 +	nvme)
-+		nvme_do_upgrade "$1"
++		# do_stage2 otherwise continues to reboot even on a returned error.
++		nvme_do_upgrade "$1" || exit 1
 +		;;
  	esac
  }
  
-@@ -68,6 +91,5 @@
+ fit_check_image() {
++	if nvme_squashfs_booted; then
++		nvme_squashfs_check_image "$1"
++		return $?
++	fi
+ 	local magic="$(get_magic_long "$1")"
+ 	[ "$magic" != "d00dfeed" ] && {
  		echo "Invalid image type."
  		return 74
  	}
 -
  	fit_check_sign -f "$1" >/dev/null || return 74
--}
-+}
-\ No newline at end of file
+ }

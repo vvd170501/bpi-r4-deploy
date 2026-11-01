@@ -1,6 +1,6 @@
 --- a/package/boot/arm-trusted-firmware-mediatek/Makefile
 +++ b/package/boot/arm-trusted-firmware-mediatek/Makefile
-@@ -675,6 +675,34 @@
+@@ -675,6 +675,37 @@
    USE_UBI:=1
  endef
  
@@ -11,6 +11,7 @@
 +  PLAT:=mt7988
 +  DRAM_USE_COMB:=1
 +  DDR4_4BG_MODE:=1
++  DEFAULT:=TARGET_mediatek_filogic
 +endef
 +
 +define Trusted-Firmware-A/mt7988-sdmmc-comb-4bg
@@ -20,6 +21,7 @@
 +  PLAT:=mt7988
 +  DRAM_USE_COMB:=1
 +  DDR4_4BG_MODE:=1
++  DEFAULT:=TARGET_mediatek_filogic
 +endef
 +
 +define Trusted-Firmware-A/mt7988-spim-nand-ubi-comb-4bg
@@ -30,12 +32,13 @@
 +  DRAM_USE_COMB:=1
 +  USE_UBI:=1
 +  DDR4_4BG_MODE:=1
++  DEFAULT:=TARGET_mediatek_filogic
 +endef
 +
  TFA_TARGETS:= \
  	mt7622-nor-1ddr \
  	mt7622-nor-2ddr \
-@@ -751,6 +779,8 @@
+@@ -751,6 +782,8 @@
  	mt7988-spim-nand-ubi-comb \
  	mt7988-spim-nand-ubi-ddr4
  
