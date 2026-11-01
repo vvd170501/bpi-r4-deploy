@@ -1,0 +1,57 @@
+# Run before 80_mount_root; verify the result before its settings restore.
+. /lib/functions/nvme-squashfs.sh
+
+nvme_squashfs_boot_failed() {
+    echo "NVMe SquashFS root: $*; stopping before normal services" > /dev/console
+    # Preserve the immutable lower rather than silently running on RAM or RW
+    # root. The SD installer remains the explicit repair path.
+    while :; do sleep 60; done
+}
+
+nvme_squashfs_prepare_root() {
+    nvme_squashfs_booted || return 0
+    nvme_squashfs_parts || nvme_squashfs_boot_failed "cannot resolve SSD partitions"
+    blockdev --setro "${NVME_DISK}p2" || nvme_squashfs_boot_failed "cannot protect lower"
+    # Ugly hack - by default, mount_root looks for rootfs_data om the same disk that contains root partition.
+    # But if using root=PARTUUID=..., it either skips search or searches all disks (if fallback is explicitly enabled).
+    # We either have to patch fstools to handle PARTUUID (not sure this is robust enough) or use extroot discovery.
+    # We can't bake fstab config into the rootfs image, because it needs either FS UUID or a label (which will lead to scanning all disks).
+    # Also, upstream now has a `fstools_overlay_name` kernel parameter. We could use it with a (somewhat) unique name instead of rootfs_data,
+    # but this is still not 100% safe.
+    #
+    # Factory reset limitation: firstboot/factoryreset and the reset-button
+    # handler discover rootfs_data independently of this extroot config. With
+    # GPT-name discovery disabled, they cannot reset p3. Use sysupgrade -n
+    # with an NVMe tar to reset settings while preserving p4 (/data).
+    #
+    # block extroot checks this RAM location before the lower's fstab.
+    # Select the exact partition: extroot's label/UUID lookups span all disks.
+    [ ! -e /tmp/overlay ] || nvme_squashfs_boot_failed "extroot staging path already exists"
+    mkdir -p /tmp/overlay/etc/config || nvme_squashfs_boot_failed "cannot create extroot config directory"
+    cat > /tmp/overlay/etc/config/fstab <<-EOF || nvme_squashfs_boot_failed "cannot write extroot configuration"
+        config mount 'nvme_overlay'
+            option target '/overlay'
+            option device '${NVME_DISK}p3'
+            option enabled '1'
+EOF
+}
+
+nvme_squashfs_verify_root() {
+    local device point type options rest lower= upper= merged=
+    nvme_squashfs_booted || return 0
+    while read -r device point type options rest; do
+        case "$point:$type" in
+            /rom:squashfs) case ",$options," in *,ro,*) lower=1 ;; esac ;;
+            /overlay:ext4) [ "$device" = "${NVME_DISK}p3" ] && upper=1 ;;
+            /:overlay) merged=1 ;;
+        esac
+    done < /proc/mounts
+    [ -n "$lower" ] && [ -n "$upper" ] && [ -n "$merged" ] || \
+        nvme_squashfs_boot_failed "missing read-only lower or persistent SSD overlay"
+    # Discard the boot-only config after extroot has mounted the real upper.
+    rm -f /tmp/overlay/etc/config/fstab
+    rmdir /tmp/overlay/etc/config /tmp/overlay/etc /tmp/overlay 2>/dev/null || :
+}
+
+boot_hook_add preinit_main nvme_squashfs_prepare_root
+boot_hook_add preinit_mount_root nvme_squashfs_verify_root

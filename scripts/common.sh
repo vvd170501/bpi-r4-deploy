@@ -34,9 +34,10 @@ prepare_build() {
 	add_after_feeds
 
 	\cp "$REPO/boards/$BOARD/configs/$VARIANT.config" .config
-	make defconfig
 	add_config
 	board_config
+	# Resolve defaults and dependencies after all shared and board settings.
+	make defconfig
 }
 
 # Read pins.conf; a value already in the environment wins.
@@ -109,7 +110,7 @@ copy_patches() {
 }
 
 # Patches both boards take from common/patches: the U-Boot NVMe/NAND/MMC
-# support, NVMe DT overlay and fitblk boot, and shared firmware build changes.
+# support, NVMe DT overlay, and shared firmware build changes.
 add_common_tree_patches() {
 	local p
 	for p in "$REPO"/common/patches/build/*.patch; do
@@ -150,9 +151,8 @@ add_after_feeds() {
 }
 
 add_config() {
-	echo "CONFIG_PACKAGE_trusted-firmware-a-mt7988-emmc-comb-4bg=y" >> .config
-	echo "CONFIG_PACKAGE_trusted-firmware-a-mt7988-sdmmc-comb-4bg=y" >> .config
-	echo "CONFIG_PACKAGE_trusted-firmware-a-mt7988-spim-nand-ubi-comb-4bg=y" >> .config
+	# The hidden 4BG TF-A packages are selected by their Makefile defaults.
+	# Assignments in .config would be discarded by make defconfig.
 	if command -v ccache >/dev/null 2>&1; then
 		echo "CONFIG_DEVEL=y" >> .config
 		echo "CONFIG_CCACHE=y" >> .config

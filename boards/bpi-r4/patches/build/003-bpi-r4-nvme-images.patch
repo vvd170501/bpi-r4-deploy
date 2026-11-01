@@ -1,22 +1,67 @@
+--- a/target/linux/mediatek/image/Config.in
++++ b/target/linux/mediatek/image/Config.in
+@@ -1,3 +1,12 @@
++config BPI_R4_NVME_OVERLAY_PARTSIZE
++	int "BPI-R4 NVMe overlay partition size (in MiB)"
++	depends on TARGET_mediatek_filogic
++	range 1 2147483647
++	default 16384
++	help
++	  Capacity of the ext4 rootfs_data partition on fresh NVMe installs.
++	  Sysupgrade preserves the existing partition size.
++
+ menuconfig MTK_SECURE_BOOT
+ 	bool "Enable Secure Boot"
+ 	select PACKAGE_dmsetup
 --- a/target/linux/mediatek/image/filogic.mk
 +++ b/target/linux/mediatek/image/filogic.mk
-@@ -81,6 +81,15 @@
- 	rm $@.tmp
- endef
+@@ -1,6 +1,7 @@
+ DTS_DIR := $(DTS_DIR)/mediatek
+ DEVICE_VARS += SUPPORTED_TELTONIKA_DEVICES
+ DEVICE_VARS += SUPPORTED_TELTONIKA_HW_MODS
++# Fresh-install overlay capacity is configured in the board variant config.
  
-+define Build/mt798x-gpt-nvme
-+	cp $@ $@.tmp 2>/dev/null || true
-+	ptgen -g -o $@.tmp -a 1 -l 1024 \
-+			-t 0x83 -N boot		-r	-p 63M@1M \
-+			-t 0x2e -N production		-p $(CONFIG_TARGET_ROOTFS_PARTSIZE)M@64M
-+	cat $@.tmp >> $@
-+	rm $@.tmp
+ define Image/Prepare
+ 	# For UBI we want only one extra block
+@@ -79,6 +80,37 @@
+ 		)
+ 	cat $@.tmp >> $@
+ 	rm $@.tmp
 +endef
 +
++# NVMe uses a kernel/DT-only FIT and a separate ZSTD SquashFS image. Build
++# from the same per-device tree as the XZ SD/eMMC root, without changing it.
++# Use the standard sysupgrade tar; partition capacities live in its metadata.
++define Build/bpi-r4-nvme-sysupgrade
++	cp $@ $@.kernel
++	test $$(stat -c%s $@.kernel) -le 268435456
++	case "$(CONFIG_BPI_R4_NVME_OVERLAY_PARTSIZE)" in ''|0*|*[!0-9]*) exit 1 ;; esac
++	test "$(CONFIG_BPI_R4_NVME_OVERLAY_PARTSIZE)" -gt 0
++	$(STAGING_DIR_HOST)/bin/mksquashfs4 \
++		$(call mkfs_target_dir,$(if $(TARGET_PER_DEVICE_ROOTFS),pkg=$(ROOTFS_ID/$(DEVICE_NAME)))) \
++		$@.root -nopad -noappend -root-owned -comp zstd -Xcompression-level 9 $(SQUASHFSOPT)
++	test $$(stat -c%s $@.root) -le $$(($(CONFIG_TARGET_ROOTFS_PARTSIZE) * 1048576))
++	$(call Build/sysupgrade-tar,kernel=$@.kernel rootfs=$@.root)
++	rm $@.kernel $@.root
++endef
++
++# Scope these fields to the NVMe artifact while reusing upstream metadata/signing.
++# foreach's list has no whitespace, so IMAGE_METADATA is one local binding.
++define Build/bpi-r4-nvme-metadata
++	$(foreach IMAGE_METADATA,"nvme_layout":"bpi-r4-nvme-squashfs-v1"$(comma)"nvme_rootfs_partsize":"$(CONFIG_TARGET_ROOTFS_PARTSIZE)"$(comma)"nvme_overlay_partsize":"$(CONFIG_BPI_R4_NVME_OVERLAY_PARTSIZE)",$(call Build/append-metadata))
++endef
++
++# Boot firmware only: production packages/rootfs never go into NAND.
++define Build/bpi-r4-nand-firmware
++	sh $(TOPDIR)/scripts/ubinize-image.sh --uboot-env \
++		$(foreach part,$(UBINIZE_PARTS),--part $(part)) $@.ubi \
++		-p $(BLOCKSIZE:%k=%KiB) -m $(PAGESIZE) $(UBINIZE_OPTS)
++	cat $@.ubi >> $@
++	rm $@.ubi
+ endef
+ 
  # Variation of the normal partition table to account
- # for factory and mfgdata partition
- #
-@@ -676,41 +685,131 @@
+@@ -676,41 +708,135 @@
  endef
  TARGET_DEVICES += bananapi_bpi-r3-mini
  
@@ -45,21 +90,28 @@
    DEVICE_COMPAT_VERSION := 1.1
    DEVICE_COMPAT_MESSAGE := The non-switch ports were renamed to match the board/case labels
    KERNEL_LOADADDR := 0x46000000
+-  KERNEL := kernel-bin | gzip
+-  KERNEL_INITRAMFS := kernel-bin | lzma | \
+-	fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb with-initrd | pad-to 64k
+-  IMAGES := sysupgrade.itb
+-  KERNEL_INITRAMFS_SUFFIX := -recovery.itb
+-  KERNEL_IN_UBI := 1
 +
 +  ARTIFACTS := \
 +      emmc-img.bin \
-+      nvme-img.bin \
++      nvme-sysupgrade.tar \
 +      sdcard.img.gz \
 +      snand-img.bin
 +  ARTIFACT/emmc-img.bin := mt798x-gpt emmc | \
 +  pad-to 17k | mt7988-bl2 emmc-comb | \
 +  pad-to 6656k | mt7988-bl31-uboot $$(DEVICE_NAME)-emmc | \
 +  pad-to 64M | append-image squashfs-sysupgrade.itb
-+  ARTIFACT/nvme-img.bin := mt798x-gpt-nvme | \
-+  pad-to 512M | append-image squashfs-sysupgrade.itb
++  ARTIFACT/nvme-sysupgrade.tar := append-kernel | \
++  fit gzip $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb external | \
++  bpi-r4-nvme-sysupgrade | bpi-r4-nvme-metadata
 +  ARTIFACT/snand-img.bin := mt7988-bl2 spim-nand-ubi-comb | \
 +  pad-to 2048k | \
-+  ubinize-image fit squashfs-sysupgrade.itb
++  bpi-r4-nand-firmware | check-size 128m
 +  ARTIFACT/sdcard.img.gz := mt798x-gpt sdmmc |\
 +  pad-to 17k | mt7988-bl2 sdmmc-comb |\
 +  pad-to 6656k | mt7988-bl31-uboot $$(DEVICE_NAME)-sdmmc |\
@@ -73,17 +125,14 @@
 +) \
 +  gzip
 +
-   KERNEL := kernel-bin | gzip
--  KERNEL_INITRAMFS := kernel-bin | lzma | \
--	fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb with-initrd | pad-to 64k
++  KERNEL := kernel-bin | gzip
++  FILESYSTEMS := squashfs
    IMAGES := sysupgrade.itb
--  KERNEL_INITRAMFS_SUFFIX := -recovery.itb
--  KERNEL_IN_UBI := 1
-+  IMAGE/sysupgrade.itb := append-kernel | fit gzip $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb external-with-rootfs | pad-rootfs | append-metadata
-+ifeq ($(DUMP),)
-+  IMAGE_SIZE := $$(shell expr 64 + $$(CONFIG_TARGET_ROOTFS_PARTSIZE))m
-+endif
-+
+   IMAGE/sysupgrade.itb := append-kernel | fit gzip $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb external-with-rootfs | pad-rootfs | append-metadata
+ ifeq ($(DUMP),)
+   IMAGE_SIZE := $$(shell expr 64 + $$(CONFIG_TARGET_ROOTFS_PARTSIZE))m
+ endif
+ 
 +  BLOCKSIZE := 128k
 +  PAGESIZE := 2048
 +  UBOOTENV_IN_UBI := 1
@@ -111,18 +160,19 @@
 +
 +  ARTIFACTS := \
 +      emmc-img.bin \
-+      nvme-img.bin \
++      nvme-sysupgrade.tar \
 +      sdcard.img.gz \
 +      snand-img.bin
 +  ARTIFACT/emmc-img.bin := mt798x-gpt emmc | \
 +  pad-to 17k | mt7988-bl2 emmc-comb-4bg | \
 +  pad-to 6656k | mt7988-bl31-uboot $$(BPI_R4_FIP_NAME)-emmc | \
 +  pad-to 64M | append-image squashfs-sysupgrade.itb
-+  ARTIFACT/nvme-img.bin := mt798x-gpt-nvme | \
-+  pad-to 512M | append-image squashfs-sysupgrade.itb
++  ARTIFACT/nvme-sysupgrade.tar := append-kernel | \
++  fit gzip $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb external | \
++  bpi-r4-nvme-sysupgrade | bpi-r4-nvme-metadata
 +  ARTIFACT/snand-img.bin := mt7988-bl2 spim-nand-ubi-comb-4bg | \
 +  pad-to 2048k | \
-+  ubinize-image fit squashfs-sysupgrade.itb
++  bpi-r4-nand-firmware | check-size 128m
 +  ARTIFACT/sdcard.img.gz := mt798x-gpt sdmmc |\
 +  pad-to 17k | mt7988-bl2 sdmmc-comb-4bg |\
 +  pad-to 6656k | mt7988-bl31-uboot $$(BPI_R4_FIP_NAME)-sdmmc |\
@@ -137,12 +187,13 @@
 +  gzip
 +
 +  KERNEL := kernel-bin | gzip
-   IMAGES := sysupgrade.itb
-   IMAGE/sysupgrade.itb := append-kernel | fit gzip $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb external-with-rootfs | pad-rootfs | append-metadata
- ifeq ($(DUMP),)
-   IMAGE_SIZE := $$(shell expr 64 + $$(CONFIG_TARGET_ROOTFS_PARTSIZE))m
- endif
- 
++  FILESYSTEMS := squashfs
++  IMAGES := sysupgrade.itb
++  IMAGE/sysupgrade.itb := append-kernel | fit gzip $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb external-with-rootfs | pad-rootfs | append-metadata
++ifeq ($(DUMP),)
++  IMAGE_SIZE := $$(shell expr 64 + $$(CONFIG_TARGET_ROOTFS_PARTSIZE))m
++endif
++
 +  BLOCKSIZE := 128k
 +  PAGESIZE := 2048
 +  UBOOTENV_IN_UBI := 1
@@ -156,12 +207,12 @@
    DEVICE_DTS_CONFIG := config-mt7988a-bananapi-bpi-r4
 -  $(call Device/bananapi_bpi-r4-common)
 +  $(call Device/bananapi_bpi-r4-common-4gb)
-+  ARTIFACTS := emmc-img.bin nvme-img.bin sdcard.img.gz
++  ARTIFACTS := emmc-img.bin nvme-sysupgrade.tar sdcard.img.gz
 +  DEVICE_PACKAGES += docker dockerd docker-compose containerd runc
  endef
  TARGET_DEVICES += bananapi_bpi-r4
  
-@@ -718,12 +817,94 @@
+@@ -718,11 +844,91 @@
    DEVICE_MODEL := BPi-R4 2.5GE
    DEVICE_DTS := mt7988a-bananapi-bpi-r4-2g5
    DEVICE_DTS_CONFIG := config-mt7988a-bananapi-bpi-r4-poe
@@ -169,19 +220,19 @@
 +  $(call Device/bananapi_bpi-r4-common-4gb)
    DEVICE_PACKAGES += mt798x-2p5g-phy-firmware-internal kmod-mt798x-2p5g-phy
 +  DEVICE_PACKAGES += docker dockerd docker-compose containerd runc
-+  ARTIFACTS := emmc-img.bin nvme-img.bin sdcard.img.gz
++  ARTIFACTS := emmc-img.bin nvme-sysupgrade.tar sdcard.img.gz
    SUPPORTED_DEVICES += bananapi,bpi-r4-2g5
 +  UBINIZE_PARTS := fip=:$(STAGING_DIR_IMAGE)/mt7988_bananapi_bpi-r4-poe-snand-u-boot.fip
  endef
  TARGET_DEVICES += bananapi_bpi-r4-poe
- 
++
 +define Device/bananapi_bpi-r4-8gb
 +  DEVICE_MODEL := BPi-R4 8GB
 +  DEVICE_DTS := mt7988a-bananapi-bpi-r4
 +  DEVICE_DTS_CONFIG := config-mt7988a-bananapi-bpi-r4
 +  BPI_R4_FIP_NAME := bananapi_bpi-r4
 +  $(call Device/bananapi_bpi-r4-common-8gb)
-+  ARTIFACTS := emmc-img.bin nvme-img.bin sdcard.img.gz
++  ARTIFACTS := emmc-img.bin nvme-sysupgrade.tar sdcard.img.gz
 +  DEVICE_PACKAGES += docker dockerd docker-compose containerd runc
 +  SUPPORTED_DEVICES += bananapi,bpi-r4
 +endef
@@ -196,15 +247,13 @@
 +  $(call Device/bananapi_bpi-r4-common-8gb)
 +  DEVICE_PACKAGES += mt798x-2p5g-phy-firmware-internal kmod-mt798x-2p5g-phy
 +  DEVICE_PACKAGES += docker dockerd docker-compose containerd runc
-+  ARTIFACTS := emmc-img.bin nvme-img.bin sdcard.img.gz
++  ARTIFACTS := emmc-img.bin nvme-sysupgrade.tar sdcard.img.gz
 +  SUPPORTED_DEVICES += bananapi,bpi-r4-2g5
 +  UBINIZE_PARTS := fip=:$(STAGING_DIR_IMAGE)/mt7988_bananapi_bpi-r4-poe-snand-u-boot.fip
 +endef
 +TARGET_DEVICES += bananapi_bpi-r4-poe-8gb
 +
-+# --- Lean NAND installer devices (no docker) — snand-img only ---
-+# NAND je 128 MiB; docker (a spol.) je =m a NENÍ v těchto devices,
-+# takže rootfs pro NAND je full-minus-docker. Instaluje eMMC/NVMe (HW nutnost).
++# NAND firmware devices: BL2 + UBI FIP/environment only, no OS image.
 +define Device/bananapi_bpi-r4-nand
 +  DEVICE_MODEL := BPi-R4 NAND installer
 +  DEVICE_DTS := mt7988a-bananapi-bpi-r4
@@ -253,7 +302,6 @@
 +  UBINIZE_PARTS := fip=:$(STAGING_DIR_IMAGE)/mt7988_bananapi_bpi-r4-poe-snand-u-boot.fip
 +endef
 +TARGET_DEVICES += bananapi_bpi-r4-poe-nand-8gb
-+
+ 
  define Device/bananapi_bpi-r4-lite
    DEVICE_VENDOR := Bananapi
-   DEVICE_MODEL := BPi-R4 Lite

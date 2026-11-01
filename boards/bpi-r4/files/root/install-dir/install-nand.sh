@@ -1,8 +1,7 @@
 #!/bin/sh
-# install-nand.sh - Install the lean NAND installer image to NAND (spi0.0)
-# Run from SD card (or eMMC). Writes the small NAND system that is then used
-# to install eMMC/NVMe (eMMC shares its controller with SD, so eMMC/NVMe can
-# only be installed from NAND).
+# install-nand.sh - Install boot firmware only to NAND (spi0.0)
+# Run from SD card (or eMMC). Writes BL2 and a UBI FIP/environment image, without a kernel/rootfs.
+# Prefer install-nvme.sh with both artifacts to prepare SSD before NAND.
 
 GH_USER="woziwrt"
 GH_REPO="bpi-r4-deploy"
@@ -228,11 +227,5 @@ printf "${GREEN}=================================================${NC}\n"
 printf "${GREEN}  NAND installation complete!${NC}\n"
 printf "${GREEN}=================================================${NC}\n"
 printf "\n"
-printf "  Next steps:\n"
-printf "  1. Power off the device\n"
-printf "  2. Set DIP switch to NAND boot (SW3-A=0, SW3-B=1)\n"
-printf "  3. Power on\n"
-printf "  4. Login via SSH and install eMMC/NVMe:\n"
-printf "     /root/install-dir/install-nvme.sh\n"
-printf "     /root/install-dir/install-emmc.sh\n"
-printf "\n"
+printf "  NAND contains boot firmware only; there is no NAND installer OS.\n"
+printf "  Prepare the SSD from SD with install-nvme.sh before booting NAND.\n"
