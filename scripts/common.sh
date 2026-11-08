@@ -1,6 +1,43 @@
 # Build steps shared by both boards, sourced by build.sh.
-# $REPO is the repository root; the steps after fetch_sources and
-# add_kernel_patches run inside $REPO/openwrt.
+# $REPO is the repository root; prepare_build runs inside $REPO/openwrt.
+
+init_build() {
+	[ "$#" -eq 2 ] || usage
+	BOARD=$1
+	VARIANT=$2
+	case $BOARD in bpi-r4|bpi-r4-pro-8x) ;; *) usage ;; esac
+	case $VARIANT in
+	standard) PROFILE=filogic-mac80211-mt798x_rfb-wifi7_nic ;;
+	wired)    PROFILE=filogic ;;
+	*) usage ;;
+	esac
+	[ -f "$REPO/boards/$BOARD/configs/$VARIANT.config" ] || usage
+	. "$REPO/boards/$BOARD/board.sh"
+	load_pins "$REPO/pins.conf"
+}
+
+# Both build modes regenerate exactly the same local patches and config.
+# Extra arguments select feeds-update options, e.g. -i to reindex locally.
+prepare_build() {
+	add_kernel_patches
+	bash "$REPO/mtk-openwrt-feeds/autobuild/unified/autobuild.sh" "$PROFILE" prepare
+
+	[ "$VARIANT" = standard ] && add_wifi_patches
+	board_tree
+	add_packages
+	add_files
+	board_packages
+
+	./scripts/feeds update -a "$@"
+	./scripts/feeds install -a
+	board_after_feeds
+	add_after_feeds
+
+	\cp "$REPO/boards/$BOARD/configs/$VARIANT.config" .config
+	make defconfig
+	add_config
+	board_config
+}
 
 # Read pins.conf; a value already in the environment wins.
 load_pins() {
@@ -40,7 +77,7 @@ fetch_sources() {
 # prepare step puts them next to MediaTek's own.
 add_kernel_patches() {
 	\cp "$REPO"/common/patches/kernel/*.patch \
-		mtk-openwrt-feeds/25.12/files/target/linux/mediatek/patches-6.12/
+		"$REPO/mtk-openwrt-feeds/25.12/files/target/linux/mediatek/patches-6.12/"
 }
 
 # Since MTK feed c21f3b36 mt76/mac80211/hostapd come from
@@ -63,11 +100,19 @@ add_wifi_patches() {
 	done
 }
 
+copy_patches() {
+	local p
+	for p in "$1"/*.patch; do
+		[ -f "$p" ] || continue
+		\cp "$p" "$2/"
+	done
+}
+
 # Patches both boards take from common/patches: the U-Boot NVMe/NAND/MMC
 # support and the NVMe DT overlay and fitblk boot.
 add_common_tree_patches() {
-	\cp "$REPO"/common/patches/uboot/*.patch package/boot/uboot-mediatek/patches/
-	\cp "$REPO"/common/patches/target/*.patch target/linux/mediatek/patches-6.12/
+	copy_patches "$REPO/common/patches/uboot" package/boot/uboot-mediatek/patches
+	copy_patches "$REPO/common/patches/target" target/linux/mediatek/patches-6.12
 }
 
 add_packages() {
@@ -79,11 +124,16 @@ add_packages() {
 }
 
 # Files baked into the image: common/files, then the board's files on top.
-add_files() {
+add_files() (
+	local overlay
+	mkdir -p /tmp/agents
+	overlay=$(mktemp -d /tmp/agents/bpi-r4-files.XXXXXX)
+	trap 'rm -rf "$overlay"' EXIT
+	rsync -a "$REPO/common/files/" "$overlay/"
+	rsync -a "$REPO/boards/$BOARD/files/" "$overlay/"
 	mkdir -p files
-	\cp -R "$REPO/common/files/." files/
-	\cp -R "$REPO/boards/$BOARD/files/." files/
-}
+	rsync -a --delete "$overlay/" files/
+)
 
 add_after_feeds() {
 	\cp "$REPO/boards/$BOARD/fit.sh" package/utils/fitblk/files/fit.sh
@@ -99,4 +149,9 @@ add_config() {
 	echo "CONFIG_PACKAGE_trusted-firmware-a-mt7988-emmc-comb-4bg=y" >> .config
 	echo "CONFIG_PACKAGE_trusted-firmware-a-mt7988-sdmmc-comb-4bg=y" >> .config
 	echo "CONFIG_PACKAGE_trusted-firmware-a-mt7988-spim-nand-ubi-comb-4bg=y" >> .config
+	if command -v ccache >/dev/null 2>&1; then
+		echo "CONFIG_DEVEL=y" >> .config
+		echo "CONFIG_CCACHE=y" >> .config
+		printf 'CONFIG_CCACHE_DIR="%s"\n' "$(ccache --get-config cache_dir)" >> .config
+	fi
 }

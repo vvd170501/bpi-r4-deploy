@@ -468,8 +468,50 @@ cd bpi-r4-deploy
 
 The images end up in `openwrt/bin/targets/mediatek/filogic/`.
 
-Each run resets and cleans the source checkouts. Local changes in `openwrt` and `mtk-openwrt-feeds` are discarded.
+A normal build resets and cleans the source checkouts. Local changes in `openwrt` and `mtk-openwrt-feeds` are discarded.
 Downloaded source archives in `openwrt/dl/` are kept and reused on subsequent runs.
+
+Builds automatically enable compiler caching when `ccache` is installed,
+using its configured cache directory (including a `CCACHE_DIR` override).
+
+#### Building with Docker
+
+If you don't have all build dependencies available or don't want to clutter the main system, you can use a docker container for building the images.
+
+```
+./docker-build.sh bpi-r4 wired
+```
+
+The wrapper builds the Docker image with required packages, then runs `./build.sh` inside a temporary container with all supplied arguments.
+The repository is bind-mounted into the container, so downloaded sources and images are still saved in the same place as for non-Docker build.
+The compiler cache is bind-mounted from `cache/` and has a 10 GB limit.
+
+#### Incremental builds
+
+**EXPERIMENTAL, use normal build for stable images.**
+
+After the first normal build has prepared the checkouts, you can use incremental mode
+to rebuild after changing patches, configs or the shared or board `files/` overlays:
+
+```sh
+./build.sh --incremental bpi-r4 wired
+# Or invoke the incremental script directly:
+./build-incremental.sh bpi-r4 wired
+# With the Docker environment used for the initial build:
+./docker-build.sh --incremental bpi-r4 wired
+```
+
+Incremental mode uses MediaTek's source cleanup and preparation stages to
+reapply the current patches, including changed, removed and renamed patches.
+It regenerates the configuration and synchronizes the file overlays, including
+deleted files. Local edits made directly in `openwrt/` or its feeds are reset;
+keep changes in this repository's patches, configs and `files/` instead.
+
+Use the same host/container environment and build profile as the initial
+build. Changes to the OpenWrt or MediaTek revisions require a normal build;
+incremental mode checks both checkouts before resetting sources. A normal
+build is also required to switch between `standard` and `wired`.
+
 
 ---
 

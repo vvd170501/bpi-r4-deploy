@@ -17,3 +17,5 @@ common/packages/luci-app-wifimgr/wifimgr-capability-analysis.md
 common/packages/luci-app-wifimgr/docs/forum_reply_cookiemonster_post6.md
 common/packages/luci-app-wifimgr/docs/mtk_dev_message.md
 common/packages/luci-app-wifimgr/docs/test-results-*.md
+
+/cache
