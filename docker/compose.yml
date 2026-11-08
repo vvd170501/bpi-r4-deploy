@@ -1,0 +1,12 @@
+services:
+  buildbox:
+    build: .
+    image: owrtbuild
+    environment:
+      CCACHE_DIR: /root/.cache/ccache
+      CCACHE_MAXSIZE: 10G
+    volumes:
+      - ../cache:/root/.cache
+      - ../:/deploy
+
+

@@ -14,8 +14,8 @@ board_tree() {
 	local b=$REPO/boards/bpi-r4
 
 	add_common_tree_patches
-	\cp "$b"/patches/uboot/*.patch package/boot/uboot-mediatek/patches/
-	\cp "$b"/patches/target/*.patch target/linux/mediatek/patches-6.12/
+	copy_patches "$b/patches/uboot" package/boot/uboot-mediatek/patches
+	copy_patches "$b/patches/target" target/linux/mediatek/patches-6.12
 	\cp "$b/filogic.mk" target/linux/mediatek/image/filogic.mk
 
 	# Ethernet/board LEDs: leds overlay on top of the NVMe one, PHY LED trigger
