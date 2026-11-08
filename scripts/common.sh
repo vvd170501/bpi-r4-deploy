@@ -109,8 +109,14 @@ copy_patches() {
 }
 
 # Patches both boards take from common/patches: the U-Boot NVMe/NAND/MMC
-# support and the NVMe DT overlay and fitblk boot.
+# support, NVMe DT overlay and fitblk boot, and shared firmware build changes.
 add_common_tree_patches() {
+	local p
+	for p in "$REPO"/common/patches/build/*.patch; do
+		[ -f "$p" ] || continue
+		patch --batch -p1 < "$p"
+	done
+
 	copy_patches "$REPO/common/patches/uboot" package/boot/uboot-mediatek/patches
 	copy_patches "$REPO/common/patches/target" target/linux/mediatek/patches-6.12
 }
@@ -136,8 +142,6 @@ add_files() (
 )
 
 add_after_feeds() {
-	\cp "$REPO/boards/$BOARD/fit.sh" package/utils/fitblk/files/fit.sh
-
 	\cp -r "$REPO/common/qmi.sh" package/network/utils/uqmi/files/lib/netifd/proto/
 	chmod -R 755 package/network/utils/uqmi/files/lib/netifd/proto
 	chmod -R 755 feeds/luci/applications/luci-app-modemdata/root
