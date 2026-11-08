@@ -23,7 +23,7 @@
  boot_production=led $bootled_pwr on ; run ubi_read_production && bootm $loadaddr#$bootconf#$bootconf_extra ; led $bootled_pwr off
  boot_recovery=led $bootled_rec on ; run ubi_read_recovery && bootm $loadaddr#$bootconf ; led $bootled_rec off
  boot_ubi=run boot_production ; run boot_recovery
-+boot_nvme=pci enum && nvme scan && part uuid nvme 0:2 nvme_rootuuid && setenv bootargs console=ttyS0,115200n1 pci=pcie_bus_perf root=PARTUUID=$nvme_rootuuid rootfstype=squashfs ro rootwait fstools_ignore_partname=1 owrt_nvme_squashfs=1 && nvme device 0 && run nvme_read_kernel && bootm $loadaddr#$bootconf#mt7988a-bananapi-bpi-r4-nvme
++boot_nvme=pci enum && nvme scan && part uuid nvme 0:2 nvme_rootuuid && setenv bootargs console=ttyS0,115200n1 pci=pcie_bus_perf root=PARTUUID=$nvme_rootuuid rootfstype=squashfs ro rootwait fstools_ignore_partname=1 owrt_nvme_squashfs=1 && nvme device 0 && run nvme_read_kernel && bootm $loadaddr#$bootconf
 +nvme_read_kernel=part start nvme 0 1 nvme_boot_start && part size nvme 0 1 nvme_boot_size && test 0x$nvme_boot_size -gt 0 && run nvme_read_header && imszb $loadaddr nvme_fit_blocks && test 0x$nvme_fit_blocks -ge 0x$nvme_header_blocks && test 0x$nvme_fit_blocks -le 0x$nvme_boot_size && test 0x$nvme_fit_blocks -le 0x80000 && nvme read $loadaddr 0x$nvme_boot_start 0x$nvme_fit_blocks
 +nvme_read_header=nvme read $loadaddr 0x$nvme_boot_start 1 && fdt addr -q $loadaddr && fdt header get nvme_header_bytes totalsize && setexpr nvme_header_blocks $nvme_header_bytes + 0x1ff && setexpr nvme_header_blocks $nvme_header_blocks / 0x200 && test 0x$nvme_header_blocks -gt 0 && test 0x$nvme_header_blocks -le 0x$nvme_boot_size && test 0x$nvme_header_blocks -le 0x80000 && nvme read $loadaddr 0x$nvme_boot_start 0x$nvme_header_blocks
  boot_tftp_forever=led $bootled_rec on ; while true ; do run boot_tftp_recovery ; sleep 1 ; done
@@ -59,7 +59,7 @@
  boot_production=led $bootled_pwr on ; run ubi_read_production && bootm $loadaddr#$bootconf#$bootconf_extra ; led $bootled_pwr off
  boot_recovery=led $bootled_rec on ; run ubi_read_recovery && bootm $loadaddr#$bootconf ; led $bootled_rec off
  boot_ubi=run boot_production ; run boot_recovery
-+boot_nvme=pci enum && nvme scan && part uuid nvme 0:2 nvme_rootuuid && setenv bootargs console=ttyS0,115200n1 pci=pcie_bus_perf root=PARTUUID=$nvme_rootuuid rootfstype=squashfs ro rootwait fstools_ignore_partname=1 owrt_nvme_squashfs=1 && nvme device 0 && run nvme_read_kernel && bootm $loadaddr#$bootconf#mt7988a-bananapi-bpi-r4-nvme
++boot_nvme=pci enum && nvme scan && part uuid nvme 0:2 nvme_rootuuid && setenv bootargs console=ttyS0,115200n1 pci=pcie_bus_perf root=PARTUUID=$nvme_rootuuid rootfstype=squashfs ro rootwait fstools_ignore_partname=1 owrt_nvme_squashfs=1 && nvme device 0 && run nvme_read_kernel && bootm $loadaddr#$bootconf
 +nvme_read_kernel=part start nvme 0 1 nvme_boot_start && part size nvme 0 1 nvme_boot_size && test 0x$nvme_boot_size -gt 0 && run nvme_read_header && imszb $loadaddr nvme_fit_blocks && test 0x$nvme_fit_blocks -ge 0x$nvme_header_blocks && test 0x$nvme_fit_blocks -le 0x$nvme_boot_size && test 0x$nvme_fit_blocks -le 0x80000 && nvme read $loadaddr 0x$nvme_boot_start 0x$nvme_fit_blocks
 +nvme_read_header=nvme read $loadaddr 0x$nvme_boot_start 1 && fdt addr -q $loadaddr && fdt header get nvme_header_bytes totalsize && setexpr nvme_header_blocks $nvme_header_bytes + 0x1ff && setexpr nvme_header_blocks $nvme_header_blocks / 0x200 && test 0x$nvme_header_blocks -gt 0 && test 0x$nvme_header_blocks -le 0x$nvme_boot_size && test 0x$nvme_header_blocks -le 0x80000 && nvme read $loadaddr 0x$nvme_boot_start 0x$nvme_header_blocks
  boot_tftp_forever=led $bootled_rec on ; while true ; do run boot_tftp_recovery ; sleep 1 ; done
@@ -92,29 +92,3 @@
 +CONFIG_CMD_FDT=y
 +CONFIG_CMD_IMI=y
 +CONFIG_CMD_SETEXPR=y
---- a/board/mediatek/mt7988/mt7988_rfb.c
-+++ b/board/mediatek/mt7988/mt7988_rfb.c
-@@ -13,10 +13,12 @@
- 	const char *media;
- 	u32 media_handle;
- 
--	/* check if NVMe boot was requested via env */
-+	/* NVMe SquashFS is selected by PARTUUID, not the FIT block driver. */
- 	if (env_get("nvme_boot")) {
--		media = "rootdisk-nvme";
--		goto set_rootdisk;
-+		chosen = fdt_path_offset(blob, "/chosen");
-+		if (chosen >= 0)
-+			fdt_delprop(blob, chosen, "rootdisk");
-+		return 0;
- 	}
- 
- 	switch ((readl(0x1001f6f0) & 0xc00) >> 10) {
-@@ -37,7 +39,6 @@
- 		break
- 		;;
- 	}
--set_rootdisk:
- 	chosen = fdt_path_offset(blob, "/chosen");
- 	if (chosen <= 0)
- 		return 0;

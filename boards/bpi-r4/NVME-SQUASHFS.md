@@ -1,6 +1,6 @@
 # BPI-R4 NVMe SquashFS format
 
-This is a fresh-install format, without initramfs. Pro 8X is unchanged.
+This is a BPI-R4 fresh-install format, without initramfs.
 NAND contains only BL2, FIP and environment volumes. Normal boot loads
 the raw kernel/DT FIT from NVMe p1 and mounts the p2 SquashFS root read-only
 by PARTUUID. p1 has no filesystem. U-Boot obtains its start and size from
@@ -39,8 +39,8 @@ CONFIG_BPI_R4_NVME_OVERLAY_PARTSIZE=8192
 
 The overlay default is `16384` (16 GiB). The setting is a Kconfig integer
 under Target Images and is retained by `make defconfig`. Normal, incremental
-and Docker builds all read it from the variant config. Both capacities are recorded in standard
-OpenWrt image metadata. These settings control fresh installs; sysupgrade
+and Docker builds all read it from the variant config. Both capacities are
+recorded in standard OpenWrt image metadata. These settings control fresh installs; sysupgrade
 preserves existing partition sizes. The bundle records p2 capacity separately
 from the SquashFS payload, so future images can grow within the reserved
 space. The build rejects a payload larger than that capacity.
@@ -99,6 +99,6 @@ intact. The write pipeline propagates tar and disk-write errors before
 kernel replacement or overlay reset. A failure after entering sysupgrade's RAM
 stage may still require a manual reboot to restart normal services.
 
-The old combined-FIT NVMe layout and BPI-R4 UniFi installer are not supported
-by this format. No migration/rollback is implemented. Full image build and
+The old combined-FIT NVMe layout is not supported by this format.
+No migration/rollback is implemented. Full image build and
 board validation remain outstanding.

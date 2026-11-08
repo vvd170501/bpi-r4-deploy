@@ -19,19 +19,33 @@ init_build() {
 # Both build modes regenerate exactly the same local patches and config.
 # Extra arguments select feeds-update options, e.g. -i to reindex locally.
 prepare_build() {
-	add_kernel_patches
+	if [ "$BOARD" = bpi-r4-pro-8x ]; then
+		add_kernel_patches
+	fi
 	bash "$REPO/mtk-openwrt-feeds/autobuild/unified/autobuild.sh" "$PROFILE" prepare
 
-	[ "$VARIANT" = standard ] && add_wifi_patches
+	if [ "$VARIANT" = standard ]; then
+		if [ "$BOARD" = bpi-r4-pro-8x ]; then
+			add_wifi_patches
+		else
+			pin_wifi_sources
+		fi
+	fi
 	board_tree
-	add_packages
+	if [ "$BOARD" = bpi-r4-pro-8x ]; then
+		add_packages
+	fi
 	add_files
-	board_packages
+	if [ "$BOARD" = bpi-r4-pro-8x ]; then
+		board_packages
+	fi
 
 	./scripts/feeds update -a "$@"
 	./scripts/feeds install -a
-	board_after_feeds
-	add_after_feeds
+	if [ "$BOARD" = bpi-r4-pro-8x ]; then
+		board_after_feeds
+		add_after_feeds
+	fi
 
 	\cp "$REPO/boards/$BOARD/configs/$VARIANT.config" .config
 	add_config
@@ -74,11 +88,16 @@ fetch_sources() {
 	fetch_source mtk-openwrt-feeds https://github.com/mediatek/mtk-openwrt-feeds main "$MTK_COMMIT"
 }
 
-# Kernel patches for both boards go into the MTK feed, so the autobuild
+# Legacy kernel patches are retained for Pro 8X only. The autobuild
 # prepare step puts them next to MediaTek's own.
 add_kernel_patches() {
 	\cp "$REPO"/common/patches/kernel/*.patch \
 		"$REPO/mtk-openwrt-feeds/25.12/files/target/linux/mediatek/patches-6.12/"
+}
+
+# R4 uses pinned Wi-Fi sources without the Pro 8X custom patches.
+pin_wifi_sources() {
+	sh "$REPO/common/softmac-pin.sh"
 }
 
 # Since MTK feed c21f3b36 mt76/mac80211/hostapd come from
@@ -110,7 +129,8 @@ copy_patches() {
 }
 
 # Patches both boards take from common/patches: the U-Boot NVMe/NAND/MMC
-# support, NVMe DT overlay, and shared firmware build changes.
+# support and shared firmware build changes; the legacy NVMe overlay is
+# included only for Pro 8X.
 add_common_tree_patches() {
 	local p
 	for p in "$REPO"/common/patches/build/*.patch; do
@@ -119,7 +139,9 @@ add_common_tree_patches() {
 	done
 
 	copy_patches "$REPO/common/patches/uboot" package/boot/uboot-mediatek/patches
-	copy_patches "$REPO/common/patches/target" target/linux/mediatek/patches-6.12
+	if [ "$BOARD" = bpi-r4-pro-8x ]; then
+		copy_patches "$REPO/common/patches/target" target/linux/mediatek/patches-6.12
+	fi
 }
 
 add_packages() {
@@ -130,13 +152,15 @@ add_packages() {
 	\cp -r "$REPO/common/packages/luci-app-sms-tool-js-main/luci-app-sms-tool-js/" feeds/luci/applications
 }
 
-# Files baked into the image: common/files, then the board's files on top.
+# Files baked into the image. Pro 8X also keeps the legacy shared overlay.
 add_files() (
 	local overlay
 	mkdir -p /tmp/agents
 	overlay=$(mktemp -d /tmp/agents/bpi-r4-files.XXXXXX)
 	trap 'rm -rf "$overlay"' EXIT
-	rsync -a "$REPO/common/files/" "$overlay/"
+	if [ "$BOARD" = bpi-r4-pro-8x ]; then
+		rsync -a "$REPO/common/files/" "$overlay/"
+	fi
 	rsync -a "$REPO/boards/$BOARD/files/" "$overlay/"
 	mkdir -p files
 	rsync -a --delete "$overlay/" files/
