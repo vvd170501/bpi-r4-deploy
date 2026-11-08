@@ -1,0 +1,25 @@
+--- a/board/mediatek/mt7988/mt7988_rfb.c
++++ b/board/mediatek/mt7988/mt7988_rfb.c
+@@ -53,6 +53,14 @@
+ 	const char *media;
+ 	u32 media_handle;
+ 
++	/* NVMe SquashFS is selected by PARTUUID, not the FIT block driver. */
++	if (env_get("nvme_boot")) {
++		chosen = fdt_path_offset(blob, "/chosen");
++		if (chosen >= 0)
++			fdt_delprop(blob, chosen, "rootdisk");
++		return 0;
++	}
++
+ 	switch ((readl(0x1001f6f0) & 0xc00) >> 10) {
+ 	case MT7988_BOOT_NOR:
+ 		media = "rootdisk-nor";
+@@ -71,7 +79,6 @@
+ 		break
+ 		;;
+ 	}
+-
+ 	chosen = fdt_path_offset(blob, "/chosen");
+ 	if (chosen <= 0)
+ 		return 0;

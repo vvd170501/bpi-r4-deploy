@@ -61,7 +61,7 @@ jobs:
           VARIANT="${{ github.event.inputs.variant }}"
 
           if [ "$VARIANT" = "wired" ]; then
-            echo "RELEASE_TAGS=release-4gb-wired release-4gb-poe-wired release-8gb-wired release-8gb-poe-wired release-8gb-wired-unifi release-8gb-poe-wired-unifi" >> $GITHUB_ENV
+            echo "RELEASE_TAGS=release-4gb-wired release-4gb-poe-wired release-8gb-wired release-8gb-poe-wired" >> $GITHUB_ENV
           else
             echo "RELEASE_TAGS=release-4gb-standard release-4gb-poe release-8gb-standard release-8gb-poe release-sdk" >> $GITHUB_ENV
           fi
@@ -159,23 +159,12 @@ jobs:
             "openwrt-mediatek-filogic-bananapi_bpi-r4-poe-8gb-emmc-img.bin" \
             "openwrt-mediatek-filogic-bananapi_bpi-r4-poe-nand-8gb-snand-img.bin"
 
-          # The wired build also feeds the UniFi releases: the 8 GB wired
-          # firmware plus the UniFi setup scripts.
+          # Give the wired variants their own release directories.
           if [ "$VARIANT" = "wired" ]; then
             cp -r rel-4gb     rel-4gb-wired
             cp -r rel-4gb-poe rel-4gb-poe-wired
             cp -r rel-8gb     rel-8gb-wired
             cp -r rel-8gb-poe rel-8gb-poe-wired
-
-            cp -r rel-8gb     rel-8gb-unifi
-            cp -r rel-8gb-poe rel-8gb-poe-unifi
-
-            for DIR in rel-8gb-unifi rel-8gb-poe-unifi; do
-              cp boards/bpi-r4/unifi/unifi-setup.sh             "$DIR/"
-              cp boards/bpi-r4/unifi/rc.local                   "$DIR/"
-              cp boards/bpi-r4/unifi/rc-network.sh              "$DIR/"
-              cp boards/bpi-r4/unifi/unifi-network-setup-8gb.sh "$DIR/unifi-network-setup.sh"
-            done
           fi
 
       # Atomic release: delete old releases/tags only AFTER a successful build +
@@ -197,12 +186,14 @@ jobs:
             check "$(ls $DIR/*-emmc-img.bin)" config-mt7988a-bananapi-bpi-r4-poe
           done
           # NAND images: the U-Boot in the fip volume must match the board and
-          # carry the NVMe boot that install-nvme.sh switches on.
+          # carry the raw-FIT NVMe boot defaults used by install-nvme.sh.
           check_snand() {
             strings "$1" | grep -qx "bootconf=$2" \
               || { echo "$1: NAND U-Boot does not boot $2"; exit 1; }
             strings "$1" | grep -q "^boot_nvme=" \
               || { echo "$1: NAND U-Boot has no boot_nvme"; exit 1; }
+            strings "$1" | grep -q "^nvme_read_kernel=" \
+              || { echo "$1: NAND U-Boot has no raw-FIT NVMe loader"; exit 1; }
             strings "$1" | grep -q 'root=PARTUUID=' \
               || { echo "$1: missing UUID-based root"; exit 1; }
             strings "$1" | grep -q 'rootfstype=squashfs' \
@@ -409,33 +400,5 @@ jobs:
             Variant: wired (no WiFi) | RAM: 8GB | PoE
             Commit: ${{ github.event.inputs.repo_commit || github.sha }}
           files: rel-8gb-poe-wired/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish release-8gb-wired-unifi
-        if: github.event.inputs.publish == 'true' && (github.event.inputs.variant == 'wired')
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: release-8gb-wired-unifi
-          name: "BPI-R4 8GB wired UniFi (latest)"
-          body: |
-            Variant: wired (no WiFi) | RAM: 8GB | UniFi stack
-            Includes: unifi-setup.sh, unifi-network-setup.sh, rc.local, rc-network.sh
-            Commit: ${{ github.event.inputs.repo_commit || github.sha }}
-          files: rel-8gb-unifi/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish release-8gb-poe-wired-unifi
-        if: github.event.inputs.publish == 'true' && (github.event.inputs.variant == 'wired')
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: release-8gb-poe-wired-unifi
-          name: "BPI-R4 8GB PoE wired UniFi (latest)"
-          body: |
-            Variant: wired (no WiFi) | RAM: 8GB | PoE | UniFi stack
-            Includes: unifi-setup.sh, unifi-network-setup.sh, rc.local, rc-network.sh
-            Commit: ${{ github.event.inputs.repo_commit || github.sha }}
-          files: rel-8gb-poe-unifi/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -32,21 +32,7 @@
  	for handle in /sys/class/block/*/of_node/phandle; do
  		[ ! -e "$handle" ] && continue
  		if [ "$rootdisk" = "$(cat $handle)" ]; then
-@@ -41,6 +43,13 @@
- 			return
- 		fi
- 	done
-+	for handle in /sys/devices/platform/soc/*/of_node/phandle; do
-+		[ ! -e "$handle" ] && continue
-+		if [ "$rootdisk" = "$(cat $handle)" ]; then
-+			export CI_METHOD="nvme"
-+			return
-+		fi
-+	done
- }
- 
- fit_do_upgrade() {
-@@ -48,7 +57,6 @@
+@@ -48,7 +50,6 @@
  	[ -n "$CI_METHOD" ] || return 1
  	[ -e /dev/fit0 ] && fitblk /dev/fit0
  	[ -e /dev/fitrw ] && fitblk /dev/fitrw
@@ -54,7 +40,7 @@
  	case "$CI_METHOD" in
  	emmc)
  		emmc_do_upgrade "$1"
-@@ -59,15 +67,22 @@
+@@ -59,15 +60,22 @@
  	ubi)
  		nand_do_upgrade "$1"
  		;;
