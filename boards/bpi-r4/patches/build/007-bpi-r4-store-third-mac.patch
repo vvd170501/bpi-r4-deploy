@@ -1,0 +1,18 @@
+--- a/target/linux/mediatek/base-files/etc/uci-defaults/99_fwenv-store-ethaddr.sh
++++ b/target/linux/mediatek/base-files/etc/uci-defaults/99_fwenv-store-ethaddr.sh
+@@ -19,6 +19,15 @@
+ 		fw_setenv ethaddr "$(cat /sys/class/net/eth0/address)"
+ 	[ -z "$(fw_printenv -n eth1addr 2>/dev/null)" ] &&
+ 		fw_setenv eth1addr "$(macaddr_add $(cat /sys/class/net/eth0/address) 1)"
++	case "$(board_name)" in
++	bananapi,bpi-r4|\
++	bananapi,bpi-r4-2g5|\
++	bananapi,bpi-r4-poe)
++		# Offsets 2..4 are used by 11_fix_wifi_mac.
++		[ -z "$(fw_printenv -n eth2addr 2>/dev/null)" ] &&
++			fw_setenv eth2addr "$(macaddr_add $(cat /sys/class/net/eth0/address) 5)"
++		;;
++	esac
+ 	;;
+ esac
+ 
