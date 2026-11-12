@@ -34,6 +34,10 @@ Downloaded source archives in `openwrt/dl/` are kept and reused on subsequent ru
 Builds automatically enable compiler caching when `ccache` is installed,
 using its configured cache directory (including a `CCACHE_DIR` override).
 
+Shared BPI-R4 settings live in `boards/bpi-r4/configs/common.config`, which
+is appended to either `wired.config` or `standard.config` before resolving
+defaults and dependencies. Shared settings take precedence over variant settings.
+
 Set partition capacities in `boards/bpi-r4/configs/<variant>.config` (MiB).
 For example, a 1 GiB read-only root and an 8 GiB writable overlay:
 

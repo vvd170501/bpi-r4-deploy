@@ -27,18 +27,5 @@ board_tree() {
 }
 
 board_config() {
-	cat >> .config <<-'EOF'
-	CONFIG_TARGET_ROOTFS_SQUASHFS=y
-	# CONFIG_TARGET_ROOTFS_EXT4FS is not set
-	# CONFIG_TARGET_ROOTFS_INITRAMFS is not set
-	CONFIG_PACKAGE_blockdev=y
-	CONFIG_PACKAGE_blkid=y
-	CONFIG_PACKAGE_e2fsprogs=y
-	CONFIG_PACKAGE_sfdisk=y
-	CONFIG_PACKAGE_mdio-tools=y
-	CONFIG_PACKAGE_kmod-mdio-netlink=y
-	EOF
-	# Publish the target SDK as release-sdk for standard builds.
-	[ "$VARIANT" = standard ] && echo "CONFIG_SDK=y" >> .config
-	return 0
+	cat "$REPO/boards/bpi-r4/configs/common.config" >> .config
 }

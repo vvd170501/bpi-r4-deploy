@@ -115,7 +115,7 @@
  endef
  
  # Variation of the normal partition table to account
-@@ -676,41 +665,133 @@
+@@ -676,41 +665,132 @@
  endef
  TARGET_DEVICES += bananapi_bpi-r3-mini
  
@@ -260,18 +260,16 @@
 -  $(call Device/bananapi_bpi-r4-common)
 +  $(call Device/bananapi_bpi-r4-common-4gb)
 +  ARTIFACTS := emmc-img.bin nvme-sysupgrade.tar sdcard.img.gz
-+  DEVICE_PACKAGES += docker dockerd docker-compose containerd runc
  endef
  TARGET_DEVICES += bananapi_bpi-r4
  
-@@ -718,11 +799,91 @@
+@@ -718,11 +798,88 @@
    DEVICE_MODEL := BPi-R4 2.5GE
    DEVICE_DTS := mt7988a-bananapi-bpi-r4-2g5
    DEVICE_DTS_CONFIG := config-mt7988a-bananapi-bpi-r4-poe
 -  $(call Device/bananapi_bpi-r4-common)
 +  $(call Device/bananapi_bpi-r4-common-4gb)
    DEVICE_PACKAGES += mt798x-2p5g-phy-firmware-internal kmod-mt798x-2p5g-phy
-+  DEVICE_PACKAGES += docker dockerd docker-compose containerd runc
 +  ARTIFACTS := emmc-img.bin nvme-sysupgrade.tar sdcard.img.gz
    SUPPORTED_DEVICES += bananapi,bpi-r4-2g5
 +  UBINIZE_PARTS := fip=:$(STAGING_DIR_IMAGE)/mt7988_bananapi_bpi-r4-poe-snand-u-boot.fip
@@ -285,7 +283,6 @@
 +  BPI_R4_FIP_NAME := bananapi_bpi-r4
 +  $(call Device/bananapi_bpi-r4-common-8gb)
 +  ARTIFACTS := emmc-img.bin nvme-sysupgrade.tar sdcard.img.gz
-+  DEVICE_PACKAGES += docker dockerd docker-compose containerd runc
 +  SUPPORTED_DEVICES += bananapi,bpi-r4
 +endef
 +TARGET_DEVICES += bananapi_bpi-r4-8gb
@@ -298,7 +295,6 @@
 +  BPI_R4_FIP_NAME := bananapi_bpi-r4-poe
 +  $(call Device/bananapi_bpi-r4-common-8gb)
 +  DEVICE_PACKAGES += mt798x-2p5g-phy-firmware-internal kmod-mt798x-2p5g-phy
-+  DEVICE_PACKAGES += docker dockerd docker-compose containerd runc
 +  ARTIFACTS := emmc-img.bin nvme-sysupgrade.tar sdcard.img.gz
 +  SUPPORTED_DEVICES += bananapi,bpi-r4-2g5
 +  UBINIZE_PARTS := fip=:$(STAGING_DIR_IMAGE)/mt7988_bananapi_bpi-r4-poe-snand-u-boot.fip
