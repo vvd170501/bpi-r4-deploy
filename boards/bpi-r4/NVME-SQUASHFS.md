@@ -7,6 +7,24 @@ by PARTUUID. p1 has no filesystem. U-Boot obtains its start and size from
 GPT, reads the fixed FIT header, then the complete FDT, and uses OpenWrt's
 `imszb` to load the full FIT including external data. Every read is bounded
 by p1 and a 256 MiB RAM-load limit. NVMe logical sectors must be 512 bytes.
+The NVMe boot command applies the SPI-NAND overlay so Linux exposes and
+attaches the NAND UBI partition containing `ubootenv` and `ubootenv2`.
+`export_fitblk_bootdev` reports that NAND storage to `uboot-envtools`;
+`fit_do_upgrade` selects the NVMe handler before bootloader discovery.
+The PoE images keep their historical image/FIT names, while their upstream
+device tree reports `bananapi,bpi-r4-2g5`; environment setup accepts both names.
+
+For an existing split-rootfs installation, sysupgrade updates the NVMe kernel
+and rootfs. Update the saved boot command separately; reflashing U-Boot is
+not required. At the serial U-Boot prompt, run `editenv boot_nvme` and append
+`#mt7988a-bananapi-bpi-r4-spim-nand` to the final `bootm $loadaddr#$bootconf`.
+Press Enter, inspect it with `printenv boot_nvme`, then run `saveenv` and
+`run boot_nvme`. A saved variable overrides compiled defaults, so replacing
+the bootloader binary alone would not update it either.
+Environment setup also skips an existing `/etc/config/ubootenv`, so an empty
+file left by an older build must be removed before rerunning
+`/etc/uci-defaults/30_uboot-envtools`.
+
 Unmodified fstools mounts p3 through extroot. NVMe preinit resolves the root
 SSD by its p2 PARTUUID and writes `/tmp/overlay/etc/config/fstab` with that
 SSD's exact p3 device path.

@@ -1,0 +1,14 @@
+https://patchwork.ozlabs.org/project/openwrt/patch/20261101121630.61367-1-dan@zem.org.uk/
+
+diff --git a/package/boot/uboot-tools/uboot-envtools/files/mediatek_filogic b/package/boot/uboot-tools/uboot-envtools/files/mediatek_filogic
+index 5fe5752eba..66c3e58d4b 100644
+--- a/package/boot/uboot-tools/uboot-envtools/files/mediatek_filogic
++++ b/package/boot/uboot-tools/uboot-envtools/files/mediatek_filogic
+@@ -102,6 +102,7 @@ asus,rt-ax59u)
+ bananapi,bpi-r3|\
+ bananapi,bpi-r3-mini|\
+ bananapi,bpi-r4|\
++bananapi,bpi-r4-2g5|\
+ bananapi,bpi-r4-lite|\
+ bananapi,bpi-r4-poe|\
+ bananapi,bpi-r4-pro-4e|\

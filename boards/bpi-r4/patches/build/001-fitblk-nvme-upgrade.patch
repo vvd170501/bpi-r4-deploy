@@ -1,54 +1,31 @@
 --- a/package/utils/fitblk/files/fit.sh
 +++ b/package/utils/fitblk/files/fit.sh
-@@ -1,9 +1,13 @@
+@@ -1,4 +1,11 @@
 +. /lib/upgrade/zz-nvme-squashfs.sh
 +
  export_fitblk_bootdev() {
 +	if nvme_squashfs_booted; then
-+		export CI_METHOD=nvme
++		# uboot-envtools also calls this: U-Boot's environment is on NAND.
++		export CI_METHOD=ubi CI_UBIPART=ubi
 +		return
 +	fi
  	[ -e /sys/firmware/devicetree/base/chosen/rootdisk ] || return
--
+ 
  	local rootdisk="$(cat /sys/firmware/devicetree/base/chosen/rootdisk)"
- 	local handle bootdev
--
- 	for handle in /sys/class/mtd/mtd*/of_node/volumes/*/phandle; do
- 		[ ! -e "$handle" ] && continue
- 		if [ "$rootdisk" = "$(cat "$handle")" ]; then
-@@ -19,7 +23,6 @@
- 			return
- 		fi
- 	done
--
- 	for handle in /sys/class/mtd/mtd*/of_node/phandle; do
- 		[ ! -e "$handle" ] && continue
- 		if [ "$rootdisk" = "$(cat $handle)" ]; then
-@@ -30,7 +33,6 @@
- 			return
- 		fi
- 	done
--
- 	for handle in /sys/class/block/*/of_node/phandle; do
- 		[ ! -e "$handle" ] && continue
- 		if [ "$rootdisk" = "$(cat $handle)" ]; then
-@@ -48,7 +50,6 @@
- 	[ -n "$CI_METHOD" ] || return 1
- 	[ -e /dev/fit0 ] && fitblk /dev/fit0
- 	[ -e /dev/fitrw ] && fitblk /dev/fitrw
--
- 	case "$CI_METHOD" in
- 	emmc)
- 		emmc_do_upgrade "$1"
-@@ -59,15 +60,22 @@
- 	ubi)
- 		nand_do_upgrade "$1"
- 		;;
-+	nvme)
+@@ -44,6 +51,12 @@
+ }
+ 
+ fit_do_upgrade() {
++	if nvme_squashfs_booted; then
++		# Dispatch before bootloader discovery so NAND is never upgraded.
 +		# do_stage2 otherwise continues to reboot even on a returned error.
 +		nvme_do_upgrade "$1" || exit 1
-+		;;
- 	esac
++		return
++	fi
+ 	export_fitblk_bootdev
+ 	[ -n "$CI_METHOD" ] || return 1
+ 	[ -e /dev/fit0 ] && fitblk /dev/fit0
+@@ -63,6 +76,10 @@
  }
  
  fit_check_image() {
@@ -59,8 +36,3 @@
  	local magic="$(get_magic_long "$1")"
  	[ "$magic" != "d00dfeed" ] && {
  		echo "Invalid image type."
- 		return 74
- 	}
--
- 	fit_check_sign -f "$1" >/dev/null || return 74
- }

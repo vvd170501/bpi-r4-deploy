@@ -1,0 +1,42 @@
+From: ...
+Subject: [PATCH] net: phy: as2xxxx: only probe Aeonsemi PHYs when matching
+
+The PHY matching callbacks are called for unrelated PHYs too. Check the
+cached PCS vendor ID before modifying mmds_present or doing any MDIO
+accesses. Otherwise the AS21xxx callback also attempts its vendor-specific
+MDIO workaround on foreign devices.
+
+Use the same early guard and generic matching fallback as the mainline
+as21xxx driver. This adapts Mihai Ordean's fix for the SDK v1.9.2 driver
+to the v2.5.3 as21xxx_match_phy_device() and as22xxx_match_phy_device()
+callbacks in as2xxxx.c.
+
+Link: https://github.com/frank-w/BPI-Router-Linux/commit/4ad7eb83042935755c2505dcc74012ba9b3e6420
+Link: https://git.kernel.org/linus/b4d5cd20507b252c746fa6971d82ac96f3b3e5b7
+---
+--- a/drivers/net/phy/as2xxxx.c
++++ b/drivers/net/phy/as2xxxx.c
+@@ -1784,6 +1784,11 @@ static int as21xxx_match_phy_device(stru
+ 	int ret;
+ 	int cnt = 0;
+
++	/* Skip foreign PHYs before changing their state or accessing MDIO. */
++	if (!phy_id_compare_vendor(phydev->c45_ids.device_ids[MDIO_MMD_PCS],
++				   PHY_VENDOR_AEONSEMI))
++		return genphy_match_phy_device(phydev, phydrv);
++
+ 	phydev->c45_ids.mmds_present |= MDIO_DEVS_PMAPMD | MDIO_DEVS_PCS | MDIO_DEVS_AN;
+
+ 	/* Read PHY ID to handle firmware loaded or HW reset */
+@@ -1898,6 +1903,11 @@ static int as22xxx_match_phy_device(stru
+ 	int ret;
+ 	int cnt = 0;
+
++	/* Skip foreign PHYs before changing their state or accessing MDIO. */
++	if (!phy_id_compare_vendor(phydev->c45_ids.device_ids[MDIO_MMD_PCS],
++				   PHY_VENDOR_AEONSEMI))
++		return genphy_match_phy_device(phydev, phydrv);
++
+ 	phydev->c45_ids.mmds_present |= MDIO_DEVS_PMAPMD | MDIO_DEVS_PCS | MDIO_DEVS_AN;
+
+ 	/* Read PHY ID to handle firmware loaded or HW reset */
