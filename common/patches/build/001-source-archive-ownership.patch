@@ -1,0 +1,15 @@
+Source archives can contain owner IDs outside a rootless container's UID/GID
+mapping. Keep extracted sources owned by the build user instead of restoring
+archive ownership, which otherwise makes tar fail before compilation.
+
+--- a/include/unpack.mk
++++ b/include/unpack.mk
+@@ -3,7 +3,7 @@
+ # Copyright (C) 2006-2020 OpenWrt.org
+ 
+ HOST_TAR:=$(TAR)
+-TAR_CMD=$(HOST_TAR) -C $(1)/.. $(TAR_OPTIONS)
++TAR_CMD=$(HOST_TAR) --no-same-owner -C $(1)/.. $(TAR_OPTIONS)
+ UNZIP_CMD=unzip -q -d $(1)/.. $(DL_DIR)/$(PKG_SOURCE)
+ 
+ ifeq ($(PKG_SOURCE),)
