@@ -1,0 +1,16 @@
+# LAN4 uses the internal MT7988 2.5G PHY, whose LED nodes default to disabled.
+# The driver already selects the LED0 pinctrl state and sets its polarity.
+# Enable the connected LED only on the 2.5GE/PoE board device tree.
+
+--- a/arch/arm64/boot/dts/mediatek/mt7988a-bananapi-bpi-r4-2g5.dts
++++ b/arch/arm64/boot/dts/mediatek/mt7988a-bananapi-bpi-r4-2g5.dts
+@@ -33,3 +33,9 @@
+ 	pinctrl-names = "i2p5gbe-led";
+ 	pinctrl-0 = <&i2p5gbe_led0_pins>;
+ };
++
++&i2p5gbe_led0 {
++	status = "okay";
++	function = LED_FUNCTION_LAN;
++	color = <LED_COLOR_ID_GREEN>;
++};

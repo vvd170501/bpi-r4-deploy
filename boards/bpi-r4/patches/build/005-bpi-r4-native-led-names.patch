@@ -7,10 +7,11 @@
 # This is specific to the MediaTek module rename, not vanilla OpenWrt.
 # It corrects newly generated defaults. Native PHY driver binding and LED
 # registration are prerequisites.
+# LAN4 on the 2.5GE/PoE variants uses the separate internal 2.5G PHY.
 
 --- a/target/linux/mediatek/filogic/base-files/etc/board.d/01_leds
 +++ b/target/linux/mediatek/filogic/base-files/etc/board.d/01_leds
-@@ -54,10 +54,10 @@
+@@ -54,10 +54,15 @@
  bananapi,bpi-r4|\
  bananapi,bpi-r4-2g5|\
  bananapi,bpi-r4-poe)
@@ -22,6 +23,11 @@
 +	ucidef_set_led_netdev "lan1" "lan1" "mt7530_dsa-0:01:green:lan" "lan1" "link tx rx"
 +	ucidef_set_led_netdev "lan2" "lan2" "mt7530_dsa-0:02:green:lan" "lan2" "link tx rx"
 +	ucidef_set_led_netdev "lan3" "lan3" "mt7530_dsa-0:03:green:lan" "lan3" "link tx rx"
++	case $board in
++	bananapi,bpi-r4-2g5|bananapi,bpi-r4-poe)
++		ucidef_set_led_netdev "lan4" "lan4" "mdio-bus:0f:green:lan" "lan4" "link tx rx"
++		;;
++	esac
  	;;
  bananapi,bpi-r4-lite)
  	ucidef_set_led_netdev "sfp0" "sfp0" "green:sfp" "sfp0" "link tx rx"
